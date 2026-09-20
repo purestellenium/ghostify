@@ -19,6 +19,8 @@ export const config = {
   subdomain: trimmed("SLACK_SUBDOMAIN") || "hackclub",
   channel: trimmed("GHOSTIFY_CHANNEL") || "C0C343T6GLA",
   prefix: trimmed("GHOSTIFY_PREFIX") || "ghost-",
+  // Reaction shown while a message is being worked on.
+  loadingEmoji: trimmed("GHOSTIFY_LOADING_EMOJI") || "loading",
 
   magickBin: trimmed("MAGICK_BIN") || null,
   emojiCacheTtlMs: number("EMOJI_CACHE_TTL_MS", 30_000),

@@ -33,31 +33,60 @@ const replyText = (error) => {
   }
 };
 
+const slackError = (error) => error?.data?.error || error?.message || "unknown error";
+
 export const createHandler = ({ registry, logger }) => {
   // Uploads are serialised: emoji.list and the upload endpoint are both rate
-  // limited, and a busy channel would otherwise fire them in parallel.
+  // limited, and a burst in the channel would otherwise fire them in parallel.
   let queue = Promise.resolve();
+  let missingScopeLogged = false;
 
-  const handle = async ({ message, client }) => {
-    const preview = (message.text || "").slice(0, 40);
-    logger.info(`event: channel=${message.channel} ts=${message.ts} text=${JSON.stringify(preview)}`);
-
-    const skip = ignoreReason(message);
-    if (skip) {
-      logger.info(`  ignored: ${skip}`);
+  // A reaction failure must never take down the actual work, so every path here
+  // degrades to a log line.
+  const onReactionError = (verb, error) => {
+    const reason = slackError(error);
+    if (reason === "missing_scope") {
+      if (!missingScopeLogged) {
+        missingScopeLogged = true;
+        logger.warn(
+          `cannot ${verb} the :${config.loadingEmoji}: reaction — the bot token is missing the reactions:write scope`,
+        );
+      }
       return;
     }
+    logger.warn(`could not ${verb} the :${config.loadingEmoji}: reaction — ${reason}`);
+  };
 
-    const name = parseSoleEmoji(message.text);
-    if (!name) {
-      logger.info("  ignored: not a lone emoji");
-      return;
+  const addLoading = async (client, message) => {
+    try {
+      await client.reactions.add({
+        channel: message.channel,
+        timestamp: message.ts,
+        name: config.loadingEmoji,
+      });
+      return true;
+    } catch (error) {
+      // A reaction left over from a crashed run still means "remove it later".
+      if (slackError(error) === "already_reacted") return true;
+      onReactionError("add", error);
+      return false;
     }
-    if (name.startsWith(config.prefix)) {
-      logger.info(`  ignored: ${name} is already ghostified`);
-      return;
-    }
+  };
 
+  const removeLoading = async (client, message) => {
+    try {
+      await client.reactions.remove({
+        channel: message.channel,
+        timestamp: message.ts,
+        name: config.loadingEmoji,
+      });
+    } catch (error) {
+      if (slackError(error) === "no_reaction") return;
+      onReactionError("remove", error);
+    }
+  };
+
+  const process = async ({ client, message, name, reacted }) => {
     const targetName = `${config.prefix}${name}`;
     const reply = (text) =>
       client.chat.postMessage({ channel: message.channel, thread_ts: message.ts, text });
@@ -80,11 +109,38 @@ export const createHandler = ({ registry, logger }) => {
       await reply(replyText(error)).catch((replyError) => {
         logger.error(`  could not post the failure reply: ${replyError.message}`);
       });
+    } finally {
+      // Clear the indicator whatever happened, including on a failed reply.
+      if (reacted) await removeLoading(client, message);
     }
   };
 
-  return (args) => {
-    queue = queue.then(() => handle(args)).catch(() => {});
-    return queue;
+  return async ({ message, client }) => {
+    const preview = (message.text || "").slice(0, 40);
+    logger.info(`event: channel=${message.channel} ts=${message.ts} text=${JSON.stringify(preview)}`);
+
+    const skip = ignoreReason(message);
+    if (skip) {
+      logger.info(`  ignored: ${skip}`);
+      return;
+    }
+
+    const name = parseSoleEmoji(message.text);
+    if (!name) {
+      logger.info("  ignored: not a lone emoji");
+      return;
+    }
+    if (name.startsWith(config.prefix)) {
+      logger.info(`  ignored: ${name} is already ghostified`);
+      return;
+    }
+
+    // React before joining the queue. Work is serialised, so a message behind a
+    // slow upload would otherwise sit with no indicator until its turn came.
+    const reacted = await addLoading(client, message);
+
+    const done = queue.then(() => process({ client, message, name, reacted })).catch(() => {});
+    queue = done;
+    return done;
   };
 };

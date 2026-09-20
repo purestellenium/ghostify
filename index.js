@@ -29,6 +29,15 @@ app.logger.info(`using ImageMagick binary: ${magick}`);
 await registry.refresh();
 app.logger.info(`loaded ${Object.keys(registry.map).length} custom emoji`);
 
+// The progress indicator is a custom emoji, so say so at boot rather than
+// failing quietly on the first message.
+if (!registry.has(config.loadingEmoji)) {
+  app.logger.warn(
+    `:${config.loadingEmoji}: is not a custom emoji in this workspace; ` +
+      "the progress reaction will fail. Set GHOSTIFY_LOADING_EMOJI to one that exists.",
+  );
+}
+
 await app.start();
 app.logger.info(`ghostify listening on channel ${config.channel}`);
 

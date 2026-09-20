@@ -35,6 +35,13 @@ is what stipples the anti-aliased edges into the ghostly look. Animated GIFs get
 `-layers Optimize` after. If the result exceeds Slack's 128 KB emoji limit it is
 re-rendered at 128px; still over, and the bot says so rather than failing silently.
 
+**Progress indicator.** As soon as a message is recognised as a lone emoji the
+bot reacts with `:loading:`, and removes it once it has replied — on success,
+on "already exists" and on every failure path. The reaction is added *before*
+the message joins the work queue, so a message waiting behind a slow upload
+still shows progress immediately. Requires the `reactions:write` scope; without
+it the bot logs a warning once and carries on doing the real work.
+
 **Uploads are serialised.** `emoji.list` and `emoji.add` are both rate limited,
 so a burst in the channel is processed one at a time.
 
@@ -53,7 +60,7 @@ different bots sharing one app token each lose roughly half their events.
 1. **Socket Mode** → enable. Generate an app-level token with `connections:write`
    → `SLACK_APP_TOKEN`.
 2. **OAuth & Permissions** → bot token scopes: `channels:history`, `chat:write`,
-   `emoji:read`. Install to the workspace → `SLACK_BOT_TOKEN`.
+   `emoji:read`, `reactions:write`. Install to the workspace → `SLACK_BOT_TOKEN`.
 3. **Event Subscriptions** → enable, subscribe to bot event `message.channels`.
 4. Invite the bot to the target channel: `/invite @ghostify`.
 5. From a logged-in Slack tab: the `xoxc-` token from local storage and the `d`
@@ -73,6 +80,7 @@ deploy fails immediately rather than on the first emoji posted.
 | `SLACK_SUBDOMAIN` | no | `hackclub` | Workspace subdomain |
 | `GHOSTIFY_CHANNEL` | no | `C0C343T6GLA` | The one channel to watch |
 | `GHOSTIFY_PREFIX` | no | `ghost-` | Prefix for uploaded emoji |
+| `GHOSTIFY_LOADING_EMOJI` | no | `loading` | Reaction shown while processing |
 | `EMOJI_CACHE_TTL_MS` | no | `30000` | How long the emoji list is cached |
 | `MAGICK_BIN` | no | auto | ImageMagick binary; auto-detects `magick` then `convert` |
 | `PORT` | no | `3000` | Health-check port |
