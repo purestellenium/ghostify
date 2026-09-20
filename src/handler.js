@@ -4,16 +4,17 @@ import { ghostify } from "./ghostify.js";
 import { parseSoleEmoji } from "./parse.js";
 
 /**
- * Messages we never act on. Anything with a subtype is an edit, a deletion, a
- * join notice or a bot post; thread replies keep the bot to top-level messages;
- * bot_id/app_id stop it from reacting to itself or other integrations.
+ * Why a message is not acted on, or null when it should be processed. Returning
+ * the reason rather than a boolean means every skipped message can say why,
+ * which is the difference between "no events arriving" and "events filtered".
  */
-const shouldIgnore = (message) =>
-  message.channel !== config.channel ||
-  Boolean(message.subtype) ||
-  Boolean(message.bot_id) ||
-  Boolean(message.app_id) ||
-  (Boolean(message.thread_ts) && message.thread_ts !== message.ts);
+const ignoreReason = (message) => {
+  if (message.channel !== config.channel) return `other channel (${message.channel})`;
+  if (message.subtype) return `subtype ${message.subtype}`;
+  if (message.bot_id || message.app_id) return "from a bot or app";
+  if (message.thread_ts && message.thread_ts !== message.ts) return "thread reply";
+  return null;
+};
 
 const replyText = (error) => {
   if (!(error instanceof GhostfyError)) {
@@ -38,11 +39,24 @@ export const createHandler = ({ registry, logger }) => {
   let queue = Promise.resolve();
 
   const handle = async ({ message, client }) => {
-    if (shouldIgnore(message)) return;
+    const preview = (message.text || "").slice(0, 40);
+    logger.info(`event: channel=${message.channel} ts=${message.ts} text=${JSON.stringify(preview)}`);
+
+    const skip = ignoreReason(message);
+    if (skip) {
+      logger.info(`  ignored: ${skip}`);
+      return;
+    }
 
     const name = parseSoleEmoji(message.text);
-    if (!name) return;
-    if (name.startsWith(config.prefix)) return; // no :ghost-ghost-parrot:
+    if (!name) {
+      logger.info("  ignored: not a lone emoji");
+      return;
+    }
+    if (name.startsWith(config.prefix)) {
+      logger.info(`  ignored: ${name} is already ghostified`);
+      return;
+    }
 
     const targetName = `${config.prefix}${name}`;
     const reply = (text) =>
@@ -52,18 +66,19 @@ export const createHandler = ({ registry, logger }) => {
       await registry.ensureFresh();
 
       if (registry.has(targetName)) {
-        logger.info(`skip ${targetName}: already exists`);
+        logger.info(`  skip ${targetName}: already exists`);
         await reply(`\`:${targetName}:\` already exists — :${targetName}:`);
         return;
       }
 
-      logger.info(`ghostifying ${name}`);
+      logger.info(`  ghostifying ${name}`);
       await ghostify(registry, name);
       await reply(`Ghostified! :${targetName}:`);
+      logger.info(`  uploaded ${targetName}`);
     } catch (error) {
-      logger.error(`failed ${targetName}: ${error.stack || error.message}`);
+      logger.error(`  failed ${targetName}: ${error.stack || error.message}`);
       await reply(replyText(error)).catch((replyError) => {
-        logger.error(`could not post the failure reply: ${replyError.message}`);
+        logger.error(`  could not post the failure reply: ${replyError.message}`);
       });
     }
   };
