@@ -1,11 +1,9 @@
-import pkg from "@slack/bolt";
+import { App, LogLevel } from "@slack/bolt";
 
 import { assertCredentials, config } from "./src/config.js";
 import { EmojiRegistry } from "./src/emoji-registry.js";
 import { createHandler } from "./src/handler.js";
 import { resolveMagick } from "./src/magick.js";
-
-const { App, LogLevel } = pkg;
 
 assertCredentials();
 
