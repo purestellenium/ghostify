@@ -18,6 +18,7 @@ const BY_MIME = {
   "image/webp": ".webp",
 };
 const KNOWN_EXTENSIONS = [".gif", ".jpeg", ".jpg", ".png", ".webp"];
+const EXPIRED_SESSION_ERRORS = new Set(["invalid_auth", "not_authed", "token_revoked", "token_expired"]);
 
 /**
  * Where a name's image lives: a custom emoji if the workspace has one (following
@@ -119,6 +120,13 @@ export const ghostify = async (registry, name) => {
       // Someone can win the race between our existence check and this upload.
       if (result.error === "error_name_taken") {
         throw alreadyExists(`\`:${targetName}:\` already exists.`);
+      }
+      // emoji.add rides a browser session, which expires on sign-out, a password
+      // change or rotation. Say so plainly instead of leaking "invalid_auth".
+      if (EXPIRED_SESSION_ERRORS.has(result.error)) {
+        throw uploadFailed(
+          "the Slack browser session (SLACK_USER_TOKEN / SLACK_COOKIE) has expired and needs re-issuing.",
+        );
       }
       throw uploadFailed(`Slack rejected the upload: ${result.error}`);
     }
