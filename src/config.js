@@ -17,8 +17,8 @@ export const config = {
   cookie: trimmed("SLACK_COOKIE"),
 
   subdomain: trimmed("SLACK_SUBDOMAIN") || "hackclub",
-  channel: trimmed("GHOSTFY_CHANNEL") || "C0C343T6GLA",
-  prefix: trimmed("GHOSTFY_PREFIX") || "ghost-",
+  channel: trimmed("GHOSTIFY_CHANNEL") || "C0C343T6GLA",
+  prefix: trimmed("GHOSTIFY_PREFIX") || "ghost-",
 
   magickBin: trimmed("MAGICK_BIN") || null,
   emojiCacheTtlMs: number("EMOJI_CACHE_TTL_MS", 30_000),

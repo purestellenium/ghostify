@@ -89,7 +89,7 @@ export const ghostify = async (registry, name) => {
   const animated = sourceExtension === ".gif";
   const outputExtension = animated ? ".gif" : ".png";
 
-  const workDir = await mkdtemp(join(tmpdir(), "ghostfy-"));
+  const workDir = await mkdtemp(join(tmpdir(), "ghostify-"));
   try {
     const rawPath = join(workDir, `source${sourceExtension}`);
     const outputPath = join(workDir, `${targetName}${outputExtension}`);

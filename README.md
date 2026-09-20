@@ -1,4 +1,4 @@
-# ghostfy
+# ghostify
 
 A Slack bot that watches one channel. When someone posts a message that is
 **nothing but a single emoji**, it downloads that emoji, runs a grayscale +
@@ -7,10 +7,10 @@ in thread.
 
 ```
 user: :parrot:
-  └─ ghostfy: Ghostified! :ghost-parrot:
+  └─ ghostify: Ghostified! :ghost-parrot:
 
 user: :parrot:            (second time)
-  └─ ghostfy: `:ghost-parrot:` already exists — :ghost-parrot:
+  └─ ghostify: `:ghost-parrot:` already exists — :ghost-parrot:
 ```
 
 ## How it works
@@ -55,7 +55,7 @@ different bots sharing one app token each lose roughly half their events.
 2. **OAuth & Permissions** → bot token scopes: `channels:history`, `chat:write`,
    `emoji:read`. Install to the workspace → `SLACK_BOT_TOKEN`.
 3. **Event Subscriptions** → enable, subscribe to bot event `message.channels`.
-4. Invite the bot to the target channel: `/invite @ghostfy`.
+4. Invite the bot to the target channel: `/invite @ghostify`.
 5. From a logged-in Slack tab: the `xoxc-` token from local storage and the `d`
    cookie value (`xoxd-…`) → `SLACK_USER_TOKEN` and `SLACK_COOKIE`.
 
@@ -71,8 +71,8 @@ deploy fails immediately rather than on the first emoji posted.
 | `SLACK_USER_TOKEN` | yes | — | Browser session token (`xoxc-`) |
 | `SLACK_COOKIE` | yes | — | Browser `d` cookie (`xoxd-`) |
 | `SLACK_SUBDOMAIN` | no | `hackclub` | Workspace subdomain |
-| `GHOSTFY_CHANNEL` | no | `C0C343T6GLA` | The one channel to watch |
-| `GHOSTFY_PREFIX` | no | `ghost-` | Prefix for uploaded emoji |
+| `GHOSTIFY_CHANNEL` | no | `C0C343T6GLA` | The one channel to watch |
+| `GHOSTIFY_PREFIX` | no | `ghost-` | Prefix for uploaded emoji |
 | `EMOJI_CACHE_TTL_MS` | no | `30000` | How long the emoji list is cached |
 | `MAGICK_BIN` | no | auto | ImageMagick binary; auto-detects `magick` then `convert` |
 | `PORT` | no | `3000` | Health-check port |

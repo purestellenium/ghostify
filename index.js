@@ -32,7 +32,7 @@ await registry.refresh();
 app.logger.info(`loaded ${Object.keys(registry.map).length} custom emoji`);
 
 await app.start();
-app.logger.info(`ghostfy listening on channel ${config.channel}`);
+app.logger.info(`ghostify listening on channel ${config.channel}`);
 
 // Socket Mode needs no inbound port, but a health endpoint gives the platform
 // something to probe.
