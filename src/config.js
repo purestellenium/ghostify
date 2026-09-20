@@ -26,8 +26,9 @@ export const config = {
   emojiCacheTtlMs: number("EMOJI_CACHE_TTL_MS", 30_000),
   port: number("PORT", 3000),
 
-  // Slack rejects custom emoji larger than this.
+  // Slack rejects custom emoji larger than this, in bytes and in pixels.
   maxUploadBytes: 128 * 1024,
+  maxDimension: 128,
 };
 
 const CREDENTIALS = [

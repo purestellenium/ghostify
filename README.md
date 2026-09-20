@@ -33,7 +33,14 @@ quantising each channel to 16 levels. It lands on the alpha channel too, which
 is what stipples the anti-aliased edges into the ghostly look. Animated GIFs get
 `-coalesce` first (frames are delta-encoded and would filter incorrectly) and
 `-layers Optimize` after. If the result exceeds Slack's 128 KB emoji limit it is
-re-rendered at 128px; still over, and the bot says so rather than failing silently.
+re-rendered smaller.
+
+Slack also rejects some animated GIFs with `resized_but_still_too_large` even
+when they sit inside the documented 128x128 / 128 KB limits — a long frame count
+alone can trigger it, and the real threshold is undocumented. Rather than guess
+one, the bot degrades and retries: 128px at full frames, then every 2nd frame,
+then 96px every 3rd, then 64px every 4th, stopping at the first render Slack
+accepts. Frames are thinned by handing ImageMagick an explicit scene list.
 
 **Progress indicator.** As soon as a message is recognised as a lone emoji the
 bot reacts with `:loading:`, and removes it once it has replied — on success,

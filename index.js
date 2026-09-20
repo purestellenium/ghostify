@@ -24,7 +24,7 @@ app.error(async (error) => {
 
 // Fail fast on a missing ImageMagick rather than on the first emoji posted.
 const magick = await resolveMagick();
-app.logger.info(`using ImageMagick binary: ${magick}`);
+app.logger.info(`using ImageMagick: ${magick.convert.join(" ")} (identify: ${magick.identify.join(" ")})`);
 
 await registry.refresh();
 app.logger.info(`loaded ${Object.keys(registry.map).length} custom emoji`);

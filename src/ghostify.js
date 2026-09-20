@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { extname, join } from "node:path";
 
 import { config } from "./config.js";
-import { runMagick } from "./magick.js";
+import { runIdentify, runMagick } from "./magick.js";
 import { byShortName, standardImageUrl } from "./standard-emoji.js";
 import { alreadyExists, notFound, processingFailed, uploadFailed } from "./errors.js";
 
@@ -19,6 +19,16 @@ const BY_MIME = {
 };
 const KNOWN_EXTENSIONS = [".gif", ".jpeg", ".jpg", ".png", ".webp"];
 const EXPIRED_SESSION_ERRORS = new Set(["invalid_auth", "not_authed", "token_revoked", "token_expired"]);
+
+// Progressively cheaper renders. Slack resizes static images itself, so those
+// only ever need one pass; animated GIFs get shrunk and thinned out.
+const STATIC_ATTEMPTS = [{ dimension: 128, stride: 1 }];
+const ANIMATED_ATTEMPTS = [
+  { dimension: 128, stride: 1 },
+  { dimension: 128, stride: 2 },
+  { dimension: 96, stride: 3 },
+  { dimension: 64, stride: 4 },
+];
 
 /**
  * Where a name's image lives: a custom emoji if the workspace has one (following
@@ -66,6 +76,23 @@ const filterArgs = (input, output, animated, resize) => [
 
 const sizeOf = async (path) => (await stat(path)).size;
 
+const frameCount = async (path) => {
+  const output = await runIdentify(["-format", "%n\n", path]);
+  const first = Number.parseInt(output.trim().split("\n")[0], 10);
+  return Number.isFinite(first) && first > 0 ? first : 1;
+};
+
+/**
+ * ImageMagick can read an explicit scene list, so thinning an animation is a
+ * matter of naming the frames to keep: "clip.gif[0,2,4,...]".
+ */
+const sceneSpec = (path, stride, total) => {
+  if (stride <= 1 || total <= 1) return path;
+  const scenes = [];
+  for (let i = 0; i < total; i += stride) scenes.push(i);
+  return `${path}[${scenes.join(",")}]`;
+};
+
 /**
  * Downloads, filters and uploads `:name:` as `:ghost-name:`.
  * Assumes the caller has already checked the target does not exist.
@@ -96,27 +123,35 @@ export const ghostify = async (registry, name) => {
     const outputPath = join(workDir, `${targetName}${outputExtension}`);
     await Bun.write(rawPath, await response.arrayBuffer());
 
-    await runMagick(filterArgs(rawPath, outputPath, animated, null));
-
-    // Slack caps custom emoji at 128 KB. Emoji render at 64px, so downscaling an
-    // oversized source costs nothing visible.
-    if ((await sizeOf(outputPath)) > config.maxUploadBytes) {
-      await runMagick(filterArgs(rawPath, outputPath, animated, 128));
-    }
-    const finalSize = await sizeOf(outputPath);
-    if (finalSize > config.maxUploadBytes) {
-      throw uploadFailed(
-        `the ghostified image is ${Math.round(finalSize / 1024)} KB, over Slack's 128 KB limit.`,
-      );
-    }
-
+    // Slack rejects some animated GIFs with "resized_but_still_too_large" even
+    // when they are inside the documented 128x128 / 128 KB limits — a long frame
+    // count alone can do it, and the real threshold is undocumented. So instead
+    // of guessing one, degrade and retry until Slack accepts.
     const uploader = new EmojiAdd(config.subdomain, config.userToken, config.cookie);
-    const result = await uploader.uploadSingle({
-      is_alias: 0,
-      name: targetName,
-      url: outputPath,
-    });
-    if (result?.error) {
+    const attempts = animated ? ANIMATED_ATTEMPTS : STATIC_ATTEMPTS;
+    const totalFrames = animated ? await frameCount(rawPath) : 1;
+    let lastError = null;
+    let usedAttempt = null;
+
+    for (const [index, attempt] of attempts.entries()) {
+      const input = sceneSpec(rawPath, attempt.stride, totalFrames);
+      await runMagick(filterArgs(input, outputPath, animated, attempt.dimension));
+
+      const size = await sizeOf(outputPath);
+      if (size > config.maxUploadBytes && index < attempts.length - 1) continue;
+      if (size > config.maxUploadBytes) {
+        throw uploadFailed(
+          `the ghostified image is ${Math.round(size / 1024)} KB, over Slack's 128 KB limit.`,
+        );
+      }
+
+      const result = await uploader.uploadSingle({ is_alias: 0, name: targetName, url: outputPath });
+      if (!result?.error) {
+        lastError = null;
+        usedAttempt = index > 0 ? attempt : null;
+        break;
+      }
+
       // Someone can win the race between our existence check and this upload.
       if (result.error === "error_name_taken") {
         throw alreadyExists(`\`:${targetName}:\` already exists.`);
@@ -128,11 +163,20 @@ export const ghostify = async (registry, name) => {
           "the Slack browser session (SLACK_USER_TOKEN / SLACK_COOKIE) has expired and needs re-issuing.",
         );
       }
-      throw uploadFailed(`Slack rejected the upload: ${result.error}`);
+      lastError = result.error;
+      if (result.error !== "resized_but_still_too_large") break;
     }
 
+    if (lastError === "resized_but_still_too_large") {
+      throw uploadFailed(
+        "Slack would not accept the image even after shrinking it and dropping frames.",
+      );
+    }
+    if (lastError) throw uploadFailed(`Slack rejected the upload: ${lastError}`);
+
     registry.add(targetName, outputPath);
-    return targetName;
+    // The caller logs when a GIF only fit after being degraded.
+    return { targetName, degradedTo: usedAttempt };
   } finally {
     await rm(workDir, { recursive: true, force: true });
   }

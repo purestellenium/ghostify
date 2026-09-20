@@ -101,7 +101,10 @@ export const createHandler = ({ registry, logger }) => {
       }
 
       logger.info(`  ghostifying ${name}`);
-      await ghostify(registry, name);
+      const { degradedTo } = await ghostify(registry, name);
+      if (degradedTo) {
+        logger.info(`  ${targetName} only fit after degrading to ${JSON.stringify(degradedTo)}`);
+      }
       await reply(`Ghostified! :${targetName}:`);
       logger.info(`  uploaded ${targetName}`);
     } catch (error) {
